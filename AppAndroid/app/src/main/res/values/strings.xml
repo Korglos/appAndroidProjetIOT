@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">Temperator</string>
+    <string name="parametres">Paramètres</string>
+    <string name="ip_address">IP Address</string>
+    <string name="enter_ip_address">Enter IP Address</string>
+    <string name="port">Port</string>
+    <string name="enter_port">Enter Port</string>
+    <string name="current_ip">Current IP:</string>
+    <string name="current_port">Current Port:</string>
+    <string name="temperator">Temperator</string>
+    <string name="envoyer">Envoyer</string>
 </resources>
