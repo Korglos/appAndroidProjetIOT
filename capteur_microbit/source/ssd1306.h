@@ -208,6 +208,8 @@ class ssd1306 {
          */
         int update_screen();
 
+        void clear();
+
     private:
         int initialize();
         int send_command(uint8_t cmd, uint8_t* data, uint8_t len);

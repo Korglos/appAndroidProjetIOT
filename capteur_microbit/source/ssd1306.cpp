@@ -333,3 +333,8 @@ int ssd1306::buffer_set_tile(uint8_t* gddram, uint8_t x0, uint8_t y0, uint8_t* t
     memcpy(addr, tile, 8);
     return 0;
 }
+
+void ssd1306::clear(){
+    buffer_set(gddram,0);
+    update_screen();
+}
