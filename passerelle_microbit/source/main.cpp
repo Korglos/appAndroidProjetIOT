@@ -24,27 +24,53 @@ DEALINGS IN THE SOFTWARE.
 */
 
 #include "MicroBit.h"
+#include "aes.h"
+#define CLEPROTOCOL "s85h7hdf"
 
 MicroBit uBit;
-ManagedString empty = "";
 
-void sendRadioMessage(){
-    uBit.radio.enable();
+void encryptAES() {
+    // Clé de 16 octets (128 bits)
+    uint8_t key[16] = { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 
+                        0xab, 0xf7, 0x65, 0x77, 0xcd, 0xe4, 0x32, 0x55 };
+    
+    // Texte clair de 16 octets (128 bits)
+    uint8_t plaintext[16] = "Hello, Micro:bit!";
+    
+    // Buffer pour le texte chiffré
+    uint8_t ciphertext[16];
+    
+    // Initialiser AES
+    struct AES_ctx ctx;
+    AES_init_ctx(&ctx, key);
 
-    if (uBit.buttonA.isPressed())
-        uBit.radio.datagram.send("1");
+    // Copier le texte clair dans le buffer du texte chiffré
+    memcpy(ciphertext, plaintext, 16);
 
-    else if (uBit.buttonB.isPressed())
-        uBit.radio.datagram.send("2");
+    // Chiffrer le texte (AES-128 ECB)
+    AES_ECB_encrypt(&ctx, ciphertext);
 
-    uBit.sleep(100);
+    // Afficher le résultat chiffré
+    for (int i = 0; i < 16; i++) {
+        uBit.serial.printf("%02x ", ciphertext[i]);
+    }
+    uBit.serial.printf("\n");
 }
 
-void onData(MicroBitEvent e)
+void sendRadioMessage(ManagedString data){
+    uBit.radio.datagram.send(CLEPROTOCOL + data);
+}
+
+void onData(MicroBitEvent)
 {
     ManagedString data = uBit.radio.datagram.recv();
-    if(data.substring(0, 8) == "Protocol"){
-        uBit.serial.send("T" + data+"\r\n");
+    if(data.length() < 12){
+        return;
+    }
+    ManagedString protocol = data.substring(0, 8);
+    ManagedString realData = data.substring(8, data.length()-8);
+    if(protocol == CLEPROTOCOL){
+        uBit.serial.send(realData+"\r\n");
     }
 }
 
@@ -55,46 +81,30 @@ void receiveRadioMessage(){
 
 }
 
-void liaisonSerie() {
-
-    // Affiche un message pour indiquer que le programme a démarré
-
-    // Lire les valeurs de l'accéléromètre
-    int x = uBit.accelerometer.getX();
-    int y = uBit.accelerometer.getY();
-    int z = uBit.accelerometer.getZ();
-
-    // Lire la température
-    int temperature = uBit.thermometer.getTemperature();
-
-    // Lire les valeurs de la boussole
-    int heading = uBit.compass.heading();
-
-    // Formater les données des capteurs pour l'envoi
-    ManagedString data = "Accelerometre X: " + ManagedString(x) + " Y: " + ManagedString(y) + " Z: " + ManagedString(z) + "\r\n";
-    data = data + "Temperature: " + ManagedString(temperature) + " C\r\n";
-    data = data + "Boussole: " + ManagedString(heading) + " degres\r\n";
-
-    // Envoyer les données via USB (interface série)
-    uBit.serial.send(data);
-
-    // Attendre une seconde avant de lire les données à nouveau
-    uBit.sleep(1000);
+void readSerialData(MicroBitEvent){
+    //Lis sur le port serial jusqu'à trouver \n
+    ManagedString receivedData = uBit.serial.readUntil('\n');
+    //Envoie
+    sendRadioMessage(receivedData.substring(0, receivedData.length()-1));//Il faut supprimer les \r\n pour ne pas envoyer trop de data par radio.
 }
 
+
 void receiveSerialMessage(){
-    if(uBit.serial.isReadable()){
-        ManagedString data = uBit.serial.readUntil(ManagedString ("\r\n"));
-        uBit.display.scroll(data);
-    }
+    //configure le buffer serial pour à 32o
+    uBit.serial.setRxBufferSize(32);
+    //Définit le char de fin à \n
+    uBit.serial.eventOn('\n');
+    //déclare l'écoute sur le bus serial et la redirection vers readSerialData
+    uBit.messageBus.listen(MICROBIT_ID_SERIAL, MICROBIT_SERIAL_EVT_DELIM_MATCH, readSerialData);
 }
 
 int main() {
     // Initialisation
     uBit.init();
+    //Initialise l'écoute sur le bus radio
     receiveRadioMessage();
-    // receiveSerialMessage();
-    // liaisonSerie();
-    // sendRadioMessage();
+    //Initialise l'écoute sur le bus serial
+    receiveSerialMessage();
+
     release_fiber();
 }
