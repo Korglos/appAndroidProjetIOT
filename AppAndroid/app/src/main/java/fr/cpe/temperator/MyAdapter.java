@@ -1,5 +1,6 @@
 package fr.cpe.temperator;
 
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,6 +42,15 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
         return data.size();
     }
 
+    public static class ViewHolder extends RecyclerView.ViewHolder {
+        public TextView textView;
+
+        public ViewHolder(View view) {
+            super(view);
+            textView = view.findViewById(R.id.item_text);
+        }
+    }
+
     public void onItemMove(int fromPosition, int toPosition) {
         if (fromPosition < toPosition) {
             for (int i = fromPosition; i < toPosition; i++) {
@@ -54,12 +64,11 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
         notifyItemMoved(fromPosition, toPosition);
     }
 
-    public static class ViewHolder extends RecyclerView.ViewHolder {
-        public TextView textView;
-
-        public ViewHolder(View view) {
-            super(view);
-            textView = view.findViewById(R.id.item_text);
+    public String onItemDragEnd() {
+        StringBuilder result = new StringBuilder();
+        for (DataCapteur dataCapteur : data) {
+            result.append(dataCapteur.getId()).append(";");
         }
+        return result.toString();
     }
 }

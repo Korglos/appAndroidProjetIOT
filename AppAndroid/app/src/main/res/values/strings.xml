@@ -9,4 +9,7 @@
     <string name="current_port">Current Port:</string>
     <string name="temperator">Temperator</string>
     <string name="envoyer">Envoyer</string>
+    <string name="ecran">Écran</string>
+    <string name="current_screen">Current Screen:</string>
+    <string name="enter_screen">Enter Screen</string>
 </resources>

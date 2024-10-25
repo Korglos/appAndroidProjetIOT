@@ -1,6 +1,7 @@
 package fr.cpe.temperator;
 
-import androidx.annotation.NonNull;
+import android.util.Log;
+
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -8,7 +9,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class MyItemTouchHelperCallback extends ItemTouchHelper.Callback {
-
     private final MyAdapter mAdapter;
 
     public MyItemTouchHelperCallback(MyAdapter adapter) {
@@ -26,19 +26,27 @@ public class MyItemTouchHelperCallback extends ItemTouchHelper.Callback {
     }
 
     @Override
-    public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-        final int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN;
+    public int getMovementFlags(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
+        int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN;
         return makeMovementFlags(dragFlags, 0);
     }
 
     @Override
-    public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
-        mAdapter.onItemMove(viewHolder.getAdapterPosition(), target.getAdapterPosition());
+    public boolean onMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder, RecyclerView.ViewHolder target) {
+        int fromPosition = viewHolder.getAdapterPosition();
+        int toPosition = target.getAdapterPosition();
+        mAdapter.onItemMove(fromPosition, toPosition);
         return true;
     }
 
     @Override
-    public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+    public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
         // No swipe action
+    }
+
+    @Override
+    public void clearView(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
+        super.clearView(recyclerView, viewHolder);
+        ((MainActivity) recyclerView.getContext()).sendUdpMessage(mAdapter.onItemDragEnd(), true);
     }
 }
