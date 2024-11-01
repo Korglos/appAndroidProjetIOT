@@ -1,0 +1,8 @@
+{
+    "microbit-dal": {
+        "bluetooth": {
+            "enabled": 0
+        },
+        "radio_max_packet_size":248
+    }
+}
