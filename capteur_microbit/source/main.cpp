@@ -73,7 +73,7 @@ void onData(MicroBitEvent)
             for(int i = 0; i < buffer.length()-11; i++){
                 if(buffer.substring(11,buffer.length()-1).charAt(i) != ';')
                 {
-                    order[count] = buffer.substring(11,buffer.length()-1).charAt(i)-'0';
+                    order[buffer.substring(11,buffer.length()-1).charAt(i)-'0'] = count;
                     uBit.serial.send(buffer.substring(11,buffer.length()-1).charAt(i));
                     count++;
                 }

@@ -40,7 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler = new Handler();
     private Runnable sendUdpRunnable;
 
-    private String ipServerAddress = "10.56.118.113";
+    private String ipServerAddress = "192.168.1.14";
     private int udpPortServer = 10000;
     private int screen = 0;
 
@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
             new DataCapteur("2", "Infrarouge", null, "µm"),
             new DataCapteur("3", "Pression", null, "hPa"),
             new DataCapteur("4", "Température", null, "°C"),
-            new DataCapteur("5", "Humidité", null, "%")
+            new DataCapteur("5", "Humidité", null, "rH")
     );
 
     Set<Integer> screens = new HashSet<>();
@@ -126,6 +126,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void updateRecyclerView(String message) {
+        message = message.replace('\r', ';');
         String[] parts = message.split(";");
 
         screens.add(Integer.parseInt(parts[0]));
@@ -135,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
-        for (int i = 1; i < parts.length && i < data.size(); i++) {
+        for (int i = 1; i < parts.length; i++) {
             for (DataCapteur d : data) {
                 if (d.getId().equals(String.valueOf(i - 1))) {
                     d.setValeur(parts[i]);

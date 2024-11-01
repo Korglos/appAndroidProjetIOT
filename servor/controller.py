@@ -44,7 +44,7 @@ class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
 
 
 # send serial message 
-SERIALPORT = "COM6"
+SERIALPORT = "COM3"
 BAUDRATE = 115200
 ser = serial.Serial()
 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
                         # time.sleep(100)
                         if ser.inWaiting() > 0:  # S'il y a des octets entrants
                                 data_bytes = ser.read(ser.inWaiting())
-                                print(data_bytes)
+                                # print(data_bytes)
                                 
                                 
                                 msg = msg + data_bytes.decode()
@@ -111,10 +111,10 @@ if __name__ == '__main__':
 
                                         for value in JSON_KEYS : 
                                                 json_struct[value] = msg_arr[JSON_KEYS.index(value)]
-                                        print("JSON STRUCTURE", json_struct)
+                                        # print("JSON STRUCTURE", json_struct)
                                         json_stringify = str(json_struct)
                                         json_stringify.replace("\'", "\"")
-                                        print(json_stringify)
+                                        # print(json_stringify)
                                         f.write(json_stringify + ",")
                                         LAST_VALUE = msg
                                         msg = ""
