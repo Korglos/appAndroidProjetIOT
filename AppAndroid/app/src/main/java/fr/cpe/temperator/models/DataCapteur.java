@@ -1,13 +1,11 @@
 package fr.cpe.temperator.models;
 
 import androidx.annotation.NonNull;
-
-import java.util.Objects;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+// Class pour gérer les données des capteurs
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
