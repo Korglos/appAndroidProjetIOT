@@ -6,6 +6,7 @@
 #include "veml6070.h"
 #include "bme280.h"
 #include "aes.h"
+#include <ManagedString.h>
 
 char* PROTOCOL="s85h7hdf";
 
@@ -36,9 +37,12 @@ ManagedString convertTabuitToManagedString(uint8_t *uint8){
 
 }
 
-void decryptAES(const uint8_t* ciphertext, uint8_t* decrypted) {
+void decryptAES(ManagedString data, uint8_t* decrypted) {
     struct AES_ctx ctx;
     AES_init_ctx(&ctx, key);
+
+    uint8_t ciphertext[bufferSize];
+    convertManagedStringToUint8(data, ciphertext, bufferSize);
 
     memcpy(decrypted, ciphertext, bufferSize);  // Copier le texte chiffré
     AES_ECB_decrypt(&ctx, decrypted);   // Déchiffrer
@@ -182,9 +186,10 @@ void ecran(){
     screen.update_screen();
 
     //---------------Radio----------------
-    ManagedString valuesString = id+";"+strValue(values[1])+";"+strValue(values[2])+strValue(values[0])+";"strValue(values[3])+";"strValue(values[4]/100)+"."+strValue(values[4]/100)+";"+strValue(values[5]/100)+"."+strValue(values[5]/100)
+    ManagedString valuesString = ""+convertedCString(id)+";"+strValue(values[1])+";"+strValue(values[2])+strValue(values[0])+";"+strValue(values[3])+";"+strValue(values[4]/100)+"."+strValue(values[4]/100)+";"+strValue(values[5]/100)+"."+strValue(values[5]/100);
     uint8_t encrypt_content[bufferSize];
 
+    char bufferRadioQueri[35];
     encryptAES(valuesString,encrypt_content);
     sprintf(bufferRadioQueri, "%s;%s", PROTOCOL, convertTabuitToManagedString(encrypt_content));
 
@@ -209,4 +214,3 @@ int main() {
     }
     release_fiber();
 }
-
