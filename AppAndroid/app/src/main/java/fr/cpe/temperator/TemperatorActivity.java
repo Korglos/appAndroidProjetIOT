@@ -37,6 +37,7 @@ import android.os.Handler;
 
 import javax.crypto.SecretKey;
 
+// Activité principale
 public class TemperatorActivity extends AppCompatActivity {
     private static final String ACTIVITY_NAME = "TemperatorActivity";
 
@@ -47,7 +48,7 @@ public class TemperatorActivity extends AppCompatActivity {
 
     private String ipServerAddress = "192.168.1.76";
     private int udpPortServer = 10000;
-    private int screen = 0;
+    private Integer screen = null;
 
     private TextView currentIpTextView;
     private TextView currentPortTextView;
@@ -76,7 +77,7 @@ public class TemperatorActivity extends AppCompatActivity {
         currentPortTextView = findViewById(R.id.current_port);
         currentScreenTextView = findViewById(R.id.current_screen );
 
-        updateCurrentIpPort();
+        updateCurrentIpPortScreen();
 
         ImageView settingsIcon = findViewById(R.id.settings_icon);
         settingsIcon.setOnClickListener(v -> showSettingsDialog());
@@ -113,23 +114,23 @@ public class TemperatorActivity extends AppCompatActivity {
     }
 
     // Envoie un message à la socket
-    protected void sendUdpMessage(String message, boolean encrypted) {
+    protected void sendUdpMessage(String message, boolean isGetValues) {
         try {
             InetAddress serverAddress = InetAddress.getByName(ipServerAddress);
 
-            Log.d("send message", message);
+            Log.d(ACTIVITY_NAME, "send message : " + message);
 
-            if (encrypted) {
+            if (!isGetValues) {
                 message = screen + ";" + message;
-                message = EncryptionUtil.encrypt(message, secretKey);
             }
+            message = EncryptionUtil.encrypt(message, secretKey);
 
             byte[] sendData = message.getBytes();
             DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, udpPortServer);
             socket.send(sendPacket);
-            Log.d("send message encrypted", message);
+            Log.d(ACTIVITY_NAME, "send encrypted message : " + message);
         } catch (Exception e) {
-            Log.e(ACTIVITY_NAME, "Error sending UDP message", e);
+            Log.e(ACTIVITY_NAME, "Error sending UDP message : ", e);
         }
     }
 
@@ -142,11 +143,8 @@ public class TemperatorActivity extends AppCompatActivity {
                     DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                     socket.receive(receivePacket);
                     String response = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                    Log.d(ACTIVITY_NAME, "Received message: " + response);
-                    runOnUiThread(() -> {
-                        Log.d("Received message", response);
-                        onNewDataReceived(response);
-                    });
+                    Log.d(ACTIVITY_NAME, "Received message : " + response);
+                    runOnUiThread(() -> onNewDataReceived(response));
                 }
             } catch (Exception e) {
                 Log.e(ACTIVITY_NAME, "Error receiving UDP message", e);
@@ -160,7 +158,7 @@ public class TemperatorActivity extends AppCompatActivity {
         sendUdpRunnable = new Runnable() {
             @Override
             public void run() {
-                sendUdpMessage("getValues()", false);
+                sendUdpMessage("getValues()", true);
                 handler.postDelayed(this, 5000);
             }
         };
@@ -171,18 +169,20 @@ public class TemperatorActivity extends AppCompatActivity {
     public void onNewDataReceived(String newData) {
         try {
             String decryptedData = EncryptionUtil.decrypt(newData, secretKey);
+            Log.d(ACTIVITY_NAME, "Decrypted data : " + decryptedData);
             updateRecyclerView(decryptedData);
         } catch (Exception e) {
             Log.e(ACTIVITY_NAME, "Error decrypting data", e);
         }
-
     }
 
     // Met à jour les données du RecyclerView
     public void updateRecyclerView(String message) {
         String[] parts = message.split(";");
 
-        screens.add(Integer.parseInt(parts[0]));
+        screen = Integer.parseInt(parts[0]);
+        screens.add(screen);
+        currentScreenTextView.setText(String.format(getString(R.string.eran_d), screen.toString()));
 
         for (int i = 1; i < parts.length; i++) {
             for (DataCapteur d : data) {
@@ -193,16 +193,17 @@ public class TemperatorActivity extends AppCompatActivity {
             }
         }
 
+
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
         DataTextAdaptater adapter = (DataTextAdaptater) recyclerView.getAdapter();
         if (Objects.nonNull(adapter)) adapter.notifyDataSetChanged();
     }
 
     // Met à jour l'adresse IP, le port de la socket et l'écran actuel
-    private void updateCurrentIpPort() {
+    private void updateCurrentIpPortScreen() {
         currentIpTextView.setText(String.format("Adresse IP du serveur : %s", ipServerAddress));
         currentPortTextView.setText(String.format(getString(R.string.port_udp_du_serveur_d), udpPortServer));
-        currentScreenTextView.setText(String.format(getString(R.string.eran_d), screen));
+        currentScreenTextView.setText(String.format(getString(R.string.eran_d), Objects.isNull(screen) ? "pas décran" : screen.toString()));
     }
 
     // Affiche la boîte de dialogue des paramètres
@@ -242,7 +243,7 @@ public class TemperatorActivity extends AppCompatActivity {
             } else {
                 screen = 0;
             }
-            updateCurrentIpPort();
+            updateCurrentIpPortScreen();
         });
         builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
 

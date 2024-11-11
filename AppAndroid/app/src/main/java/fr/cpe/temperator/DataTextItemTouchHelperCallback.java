@@ -44,6 +44,6 @@ public class DataTextItemTouchHelperCallback extends ItemTouchHelper.Callback {
     @Override
     public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
         super.clearView(recyclerView, viewHolder);
-        ((TemperatorActivity) recyclerView.getContext()).sendUdpMessage(mAdapter.onItemDragEnd(), true);
+        ((TemperatorActivity) recyclerView.getContext()).sendUdpMessage(mAdapter.onItemDragEnd(), false);
     }
 }

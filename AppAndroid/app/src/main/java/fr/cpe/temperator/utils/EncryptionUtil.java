@@ -16,7 +16,6 @@ import fr.cpe.temperator.exeptions.CipherExeption;
 // Class utilitaire pour chiffer les données
 public class EncryptionUtil {
     private static final String ALGORITHM = "AES";
-//    private static final String ALGORITHM = "AES/CBC/NoPadding"; // faudrait essayer avec ça, c'est plus sécurisé
 
     private static final String FIXED_KEY = "2b7e151628aed2a6abf7158809cf4f3c";
 
