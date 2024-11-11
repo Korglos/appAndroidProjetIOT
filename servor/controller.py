@@ -34,23 +34,23 @@ class ThreadedUDPRequestHandler(socketserver.BaseRequestHandler):
 
 
     def handle(self):
-        #Récuperer la donnée encodée
+        #Récupère la donnée encodée
         data = self.request[0].strip()
 
         # Converti la clé hexa en tableau de bits
         key = bytes.fromhex(KCRYPT)
 
-        #Décodage des données 
+        #Décode les données 
         encrypted_bytes = base64.b64decode(data)
 
-        #Déchiffrer AES/ECB
+        #Déchiffre en AES/ECB
         cipher = AES.new(key, AES.MODE_ECB)
 
-        #Enlever le padding pour éviter la corruption du message
+        #Enlever le padding pour éviter la corruption du message (16bits)
         decrypted_data = unpad(cipher.decrypt(encrypted_bytes))
         decrypted_message = ""
         try:
-            # decode le message
+            # décode le message
             decrypted_message = decrypted_data.decode()
             print("MESSAGE : ", decrypted_message)
         except UnicodeDecodeError as e:
@@ -65,20 +65,24 @@ class ThreadedUDPRequestHandler(socketserver.BaseRequestHandler):
                 if data in MICRO_COMMANDS: # Send message through UART
                         sendUARTMessage(data)
                 elif ";" in decrypted_message:
+                        # Même méthode que plus haut
                         encrypted_data = base64.b64decode(data)
                         unpadded_data = unpad(cipher.decrypt(encrypted_data))
                         decrypted_order = ""
                         try:
-                                # decode le message
                                 decrypted_order = unpadded_data.decode() + "\r\n"
                                 ORDER = decrypted_order.encode()
+                                # Envoi du message non chiffré à la passerelle
                                 sendUARTMessage(ORDER)
                         except UnicodeDecodeError as e:
                                 print("Erreur de décodage : ", e)
                         
                 elif decrypted_message  == "getValues()": # Sent last value received from micro-controller
+                        # Ici, je chiffre les données que j'envoie à l'application
                         data_encode = LAST_VALUE.encode()
-                        padded_data = pad(data_encode, AES.block_size)
+
+                        # AES.block_size = 16bits
+                        padded_data = pad(data_encode, AES.block_size) 
                         encrypted_data = cipher.encrypt(padded_data)
                         encrypted_base64 = base64.b64encode(encrypted_data)
                         print("J'envoie les valeurs : ", encrypted_base64)
