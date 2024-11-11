@@ -1,9 +1,11 @@
 package fr.cpe.temperator;
 
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.os.Looper;
-import android.os.StrictMode;
-import android.util.Log;
+import android.os.IBinder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,31 +21,32 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import fr.cpe.temperator.models.DataCapteur;
-import fr.cpe.temperator.utils.EncryptionUtil;
-
-import android.os.Handler;
-
-import javax.crypto.SecretKey;
+import fr.cpe.temperator.services.SocketService;
 
 public class TemperatorActivity extends AppCompatActivity {
-    private static final String ACTIVITY_NAME = "TemperatorActivity";
+    private SocketService socketService;
+    private boolean isBound = false;
 
-    private DatagramSocket socket;
-    private Thread receiveThread;
-    private Handler handler;
-    private Runnable sendUdpRunnable;
+    private ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            SocketService.LocalBinder binder = (SocketService.LocalBinder) service;
+            socketService = binder.getService();
+            isBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            isBound = false;
+        }
+    };
 
     private String ipServerAddress = "10.56.118.113";
     private int udpPortServer = 10000;
@@ -52,8 +55,6 @@ public class TemperatorActivity extends AppCompatActivity {
     private TextView currentIpTextView;
     private TextView currentPortTextView;
     private TextView currentScreenTextView;
-
-    private SecretKey secretKey;
 
     List<DataCapteur> data = Arrays.asList(
             new DataCapteur("0", "Luminosité", null, "lux"),
@@ -66,7 +67,6 @@ public class TemperatorActivity extends AppCompatActivity {
 
     Set<Integer> screens = new HashSet<>();
 
-    // Initialisation de l'activité
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,7 +74,7 @@ public class TemperatorActivity extends AppCompatActivity {
 
         currentIpTextView = findViewById(R.id.current_ip);
         currentPortTextView = findViewById(R.id.current_port);
-        currentScreenTextView = findViewById(R.id.current_screen );
+        currentScreenTextView = findViewById(R.id.current_screen);
 
         updateCurrentIpPort();
 
@@ -91,121 +91,23 @@ public class TemperatorActivity extends AppCompatActivity {
         ItemTouchHelper touchHelper = new ItemTouchHelper(callback);
         touchHelper.attachToRecyclerView(recyclerView);
 
-        connectSocket();
-
-        startListening();
-
-        getValues();
+        startSocketService();
     }
 
-    // Connexion à la socket
-    public void connectSocket() {
-        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-        StrictMode.setThreadPolicy(policy);
-
-        handler = new Handler(Looper.getMainLooper());
-        try {
-            socket = new DatagramSocket();
-            secretKey = EncryptionUtil.getFixedKey();
-        } catch (SocketException e) {
-            Log.e(ACTIVITY_NAME, "Error creating socket", e);
-        }
+    private void startSocketService() {
+        Intent intent = new Intent(this, SocketService.class);
+        intent.putExtra("ipServerAddress", ipServerAddress);
+        intent.putExtra("udpPortServer", udpPortServer);
+        intent.putExtra("screen", screen);
+        startService(intent);
     }
 
-    // Envoie un message à la socket
-    protected void sendUdpMessage(String message, boolean encrypted) {
-        try {
-            InetAddress serverAddress = InetAddress.getByName(ipServerAddress);
-
-            Log.d("send message", message);
-
-            if (encrypted) {
-                message = screen + ";" + message;
-                message = EncryptionUtil.encrypt(message, secretKey);
-            }
-
-            byte[] sendData = message.getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, udpPortServer);
-            socket.send(sendPacket);
-            Log.d("send message encrypted", message);
-        } catch (Exception e) {
-            Log.e(ACTIVITY_NAME, "Error sending UDP message", e);
-        }
-    }
-
-    // Écoute les messages de la socket
-    private void startListening() {
-        receiveThread = new Thread(() -> {
-            try {
-                byte[] receiveData = new byte[1024];
-                while (!Thread.currentThread().isInterrupted()) {
-                    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-                    socket.receive(receivePacket);
-                    String response = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                    Log.d(ACTIVITY_NAME, "Received message: " + response);
-                    runOnUiThread(() -> {
-                        Log.d("Received message", response);
-                        onNewDataReceived(response);
-                    });
-                }
-            } catch (Exception e) {
-                Log.e(ACTIVITY_NAME, "Error receiving UDP message", e);
-            }
-        });
-        receiveThread.start();
-    }
-
-    // Envoie le message "getValues()" à la socket toutes les 5 secondes pour récupérer les données des capteurs
-    public void getValues() {
-        sendUdpRunnable = new Runnable() {
-            @Override
-            public void run() {
-                sendUdpMessage("getValues()", false);
-                handler.postDelayed(this, 5000);
-            }
-        };
-        handler.post(sendUdpRunnable);
-    }
-
-    // Décrypte les données reçues et les affiche dans le RecyclerView
-    public void onNewDataReceived(String newData) {
-        try {
-            String decryptedData = EncryptionUtil.decrypt(newData, secretKey);
-            updateRecyclerView(decryptedData);
-        } catch (Exception e) {
-            Log.e(ACTIVITY_NAME, "Error decrypting data", e);
-        }
-
-    }
-
-    // Met à jour les données du RecyclerView
-    public void updateRecyclerView(String message) {
-        String[] parts = message.split(";");
-
-        screens.add(Integer.parseInt(parts[0]));
-
-        for (int i = 1; i < parts.length && i < data.size(); i++) {
-            for (DataCapteur d : data) {
-                if (d.getId().equals(String.valueOf(i - 1))) {
-                    d.setValeur(parts[i]);
-                    break;
-                }
-            }
-        }
-
-        RecyclerView recyclerView = findViewById(R.id.recycler_view);
-        DataTextAdaptater adapter = (DataTextAdaptater) recyclerView.getAdapter();
-        if (Objects.nonNull(adapter)) adapter.notifyDataSetChanged();
-    }
-
-    // Met à jour l'adresse IP, le port de la socket et l'écran actuel
     private void updateCurrentIpPort() {
         currentIpTextView.setText(String.format("Adresse IP du serveur : %s", ipServerAddress));
         currentPortTextView.setText(String.format(getString(R.string.port_udp_du_serveur_d), udpPortServer));
         currentScreenTextView.setText(String.format(getString(R.string.eran_d), screen));
     }
 
-    // Affiche la boîte de dialogue des paramètres
     private void showSettingsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Settings");
@@ -219,12 +121,7 @@ public class TemperatorActivity extends AppCompatActivity {
         inputIp.setText(ipServerAddress);
         inputPort.setText(String.valueOf(udpPortServer));
 
-        List<Integer> screensSpinnerList = new ArrayList<>(screens);
-        if (screensSpinnerList.isEmpty()) {
-            screensSpinnerList.add(0);
-        }
-        screensSpinnerList.sort(Integer::compareTo);
-        ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, screensSpinnerList);
+        ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new ArrayList<>(screens));
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         inputScreen.setAdapter(adapter);
 
@@ -235,30 +132,40 @@ public class TemperatorActivity extends AppCompatActivity {
         builder.setPositiveButton("OK", (dialog, which) -> {
             ipServerAddress = inputIp.getText().toString();
             udpPortServer = Integer.parseInt(inputPort.getText().toString());
-
-            Integer idScreen = (Integer) inputScreen.getSelectedItem();
-            if (Objects.nonNull(idScreen)) {
-                screen = idScreen;
-            } else {
-                screen = 0;
-            }
+            screen = (Integer) inputScreen.getSelectedItem();
             updateCurrentIpPort();
+            startSocketService(); // Restart service with new settings
         });
         builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
 
         builder.show();
     }
 
-    // Arrête le Runnable et ferme la socket lorsque l'activité est détruite
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Intent intent = new Intent(this, SocketService.class);
+        bindService(intent, connection, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (isBound) {
+            unbindService(connection);
+            isBound = false;
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (Objects.nonNull(receiveThread) && !receiveThread.isInterrupted()) {
-            receiveThread.interrupt();
+        stopService(new Intent(this, SocketService.class));
+    }
+
+    public void sendUdpMessage(String message, boolean encrypted) {
+        if (isBound) {
+            socketService.sendUdpMessage(message, encrypted);
         }
-        if (Objects.nonNull(socket) && !socket.isClosed()) {
-            socket.close();
-        }
-        handler.removeCallbacks(sendUdpRunnable);
     }
 }
