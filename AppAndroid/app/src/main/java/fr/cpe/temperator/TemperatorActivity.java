@@ -45,7 +45,7 @@ public class TemperatorActivity extends AppCompatActivity {
     private Handler handler;
     private Runnable sendUdpRunnable;
 
-    private String ipServerAddress = "10.56.118.113";
+    private String ipServerAddress = "192.168.1.76";
     private int udpPortServer = 10000;
     private int screen = 0;
 
@@ -184,7 +184,7 @@ public class TemperatorActivity extends AppCompatActivity {
 
         screens.add(Integer.parseInt(parts[0]));
 
-        for (int i = 1; i < parts.length && i < data.size(); i++) {
+        for (int i = 1; i < parts.length; i++) {
             for (DataCapteur d : data) {
                 if (d.getId().equals(String.valueOf(i - 1))) {
                     d.setValeur(parts[i]);
