@@ -33,11 +33,10 @@ uint8_t key[16] = { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
                     0xab, 0xf7, 0x65, 0x77, 0xcd, 0xe4, 0x32, 0x55 };
 size_t bufferSize;
 
-void convertManagedStringToUint8(ManagedString mStr, uint8_t* buffer, size_t bufferSize) {
+void convertManagedStringToUint8(ManagedString mStr, uint8_t* buffer) {
     // Convertir ManagedString en char*
     const char* charArray = mStr.toCharArray();
     
-    // Taille minimale entre bufferSize et la longueur de la chaîne
     size_t length = (size_t)(mStr.length()) < bufferSize ? mStr.length() : bufferSize;
     
     // Copier les données dans le tableau uint8_t
@@ -61,7 +60,7 @@ void decryptAES(ManagedString data, uint8_t* decrypted) {
     AES_init_ctx(&ctx, key);
 
     uint8_t ciphertext[bufferSize];
-    convertManagedStringToUint8(data, ciphertext, bufferSize);
+    convertManagedStringToUint8(data, ciphertext);
 
     memcpy(decrypted, ciphertext, bufferSize);  // Copier le texte chiffré
     AES_ECB_decrypt(&ctx, decrypted);   // Déchiffrer
@@ -70,7 +69,7 @@ void decryptAES(ManagedString data, uint8_t* decrypted) {
 void encryptAES(ManagedString data, uint8_t *ciphertext) {       
     uint8_t buffer[bufferSize];
     
-    convertManagedStringToUint8(data, buffer, bufferSize);
+    convertManagedStringToUint8(data, buffer);
     
     // Initialiser AES
     struct AES_ctx ctx;
