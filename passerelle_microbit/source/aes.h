@@ -48,7 +48,9 @@ struct AES_ctx
   uint8_t Iv[AES_BLOCKLEN];
 #endif
 };
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 void AES_init_ctx(struct AES_ctx* ctx, const uint8_t* key);
 #if (defined(CBC) && (CBC == 1)) || (defined(CTR) && (CTR == 1))
 void AES_init_ctx_iv(struct AES_ctx* ctx, const uint8_t* key, const uint8_t* iv);
@@ -63,7 +65,9 @@ void AES_ECB_encrypt(const struct AES_ctx* ctx, uint8_t* buf);
 void AES_ECB_decrypt(const struct AES_ctx* ctx, uint8_t* buf);
 
 #endif // #if defined(ECB) && (ECB == !)
-
+#ifdef __cplusplus
+}
+#endif
 
 #if defined(CBC) && (CBC == 1)
 // buffer size MUST be mutile of AES_BLOCKLEN;
