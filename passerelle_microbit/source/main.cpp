@@ -46,9 +46,22 @@ void convertManagedStringToUint8(ManagedString mStr, uint8_t* buffer, size_t buf
     }
 }
 
-void decryptAES(const uint8_t* ciphertext, uint8_t* decrypted) {
+ManagedString convertTabuitToManagedString(uint8_t *uint8){
+    char charArray[bufferSize + 1];  
+    for (size_t i = 0; i < bufferSize; i++) {
+        charArray[i] = (char)uint8[i];  // Convertir uint8_t en char
+    }
+    charArray[bufferSize] = '\0';  // Ajouter le caractère null pour la fin de la chaîne
+    return ManagedString(charArray);
+
+}
+
+void decryptAES(ManagedString data, uint8_t* decrypted) {
     struct AES_ctx ctx;
     AES_init_ctx(&ctx, key);
+
+    uint8_t ciphertext[bufferSize];
+    convertManagedStringToUint8(data, ciphertext, bufferSize);
 
     memcpy(decrypted, ciphertext, bufferSize);  // Copier le texte chiffré
     AES_ECB_decrypt(&ctx, decrypted);   // Déchiffrer
@@ -77,13 +90,7 @@ void sendRadioMessage(ManagedString data){
     uint8_t ciphertext[bufferSize];
     encryptAES(data, ciphertext);
 
-    char charArray[bufferSize + 1];  // +1 pour le caractère null terminator
-    for (size_t i = 0; i < bufferSize; i++) {
-        charArray[i] = (char)buffer[i];  // Convertir uint8_t en char
-    }
-    charArray[bufferSize] = '\0';  // Ajouter le caractère null pour la fin de la chaîne
-
-    uBit.radio.datagram.send(CLEPROTOCOL + ManagedString(charArray));
+    uBit.radio.datagram.send(CLEPROTOCOL + convertTabuitToManagedString(ciphertext));
 }
 
 void onData(MicroBitEvent)
@@ -98,10 +105,10 @@ void onData(MicroBitEvent)
         bufferSize = data.length()-8;
 
         uint8_t dechiffre[bufferSize];
-
-        decryptAES(ciphertext, dechiffre);
         
-        // uBit.serial.send(realData+"\r\n");
+        decryptAES(realData, dechiffre);
+
+        uBit.serial.send(convertTabuitToManagedString(dechiffre)+"\r\n");
     }
 
 }
