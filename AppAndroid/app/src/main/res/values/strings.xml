@@ -12,4 +12,6 @@
     <string name="ecran">Écran</string>
     <string name="current_screen">Current Screen:</string>
     <string name="enter_screen">Enter Screen</string>
+    <string name="port_udp_du_serveur_d">Port UDP du serveur : %d</string>
+    <string name="eran_d">Eran : %d</string>
 </resources>
