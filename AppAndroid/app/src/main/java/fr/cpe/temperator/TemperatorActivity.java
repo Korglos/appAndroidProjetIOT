@@ -1,7 +1,7 @@
 package fr.cpe.temperator;
 
-import android.content.DialogInterface;
 import android.os.Bundle;
+import android.os.Looper;
 import android.os.StrictMode;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -22,25 +22,30 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import fr.cpe.temperator.models.DataCapteur;
+import fr.cpe.temperator.utils.EncryptionUtil;
 
 import android.os.Handler;
 
 import javax.crypto.SecretKey;
 
-public class MainActivity extends AppCompatActivity {
+public class TemperatorActivity extends AppCompatActivity {
+    private static final String ACTIVITY_NAME = "TemperatorActivity";
+
     private DatagramSocket socket;
     private Thread receiveThread;
-    private Handler handler = new Handler();
+    private Handler handler;
     private Runnable sendUdpRunnable;
 
-    private String ipServerAddress = "192.168.1.14";
+    private String ipServerAddress = "192.168.1.76";
     private int udpPortServer = 10000;
     private int screen = 0;
 
@@ -49,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView currentScreenTextView;
 
     private SecretKey secretKey;
-    boolean fritsMessage = true;
 
     List<DataCapteur> data = Arrays.asList(
             new DataCapteur("0", "Luminosité", null, "lux"),
@@ -57,11 +61,12 @@ public class MainActivity extends AppCompatActivity {
             new DataCapteur("2", "Infrarouge", null, "µm"),
             new DataCapteur("3", "Pression", null, "hPa"),
             new DataCapteur("4", "Température", null, "°C"),
-            new DataCapteur("5", "Humidité", null, "rH")
+            new DataCapteur("5", "Humidité", null, "%")
     );
 
     Set<Integer> screens = new HashSet<>();
 
+    // Initialisation de l'activité
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,67 +79,110 @@ public class MainActivity extends AppCompatActivity {
         updateCurrentIpPort();
 
         ImageView settingsIcon = findViewById(R.id.settings_icon);
-        settingsIcon.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showSettingsDialog();
-            }
-        });
+        settingsIcon.setOnClickListener(v -> showSettingsDialog());
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        MyAdapter adapter = new MyAdapter(data);
+        DataTextAdaptater adapter = new DataTextAdaptater(data);
         recyclerView.setAdapter(adapter);
 
-        ItemTouchHelper.Callback callback = new MyItemTouchHelperCallback(adapter);
+        ItemTouchHelper.Callback callback = new DataTextItemTouchHelperCallback(adapter);
         ItemTouchHelper touchHelper = new ItemTouchHelper(callback);
         touchHelper.attachToRecyclerView(recyclerView);
 
-        // Allow network operations on the main thread for simplicity (not recommended for production)
-        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
-        StrictMode.setThreadPolicy(policy);
-
-        try {
-            socket = new DatagramSocket();
-            secretKey = EncryptionUtil.getFixedKey();
-        } catch (Exception e) {
-            Log.e("MainActivity", "Error creating socket", e);
-        }
+        connectSocket();
 
         startListening();
 
-        // Initialize the Runnable to send the UDP message every 5 seconds
+        getValues();
+    }
+
+    // Connexion à la socket
+    public void connectSocket() {
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+
+        handler = new Handler(Looper.getMainLooper());
+        try {
+            socket = new DatagramSocket();
+            secretKey = EncryptionUtil.getFixedKey();
+        } catch (SocketException e) {
+            Log.e(ACTIVITY_NAME, "Error creating socket", e);
+        }
+    }
+
+    // Envoie un message à la socket
+    protected void sendUdpMessage(String message, boolean encrypted) {
+        try {
+            InetAddress serverAddress = InetAddress.getByName(ipServerAddress);
+
+            Log.d("send message", message);
+
+            if (encrypted) {
+                message = screen + ";" + message;
+                message = EncryptionUtil.encrypt(message, secretKey);
+            }
+
+            byte[] sendData = message.getBytes();
+            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, udpPortServer);
+            socket.send(sendPacket);
+            Log.d("send message encrypted", message);
+        } catch (Exception e) {
+            Log.e(ACTIVITY_NAME, "Error sending UDP message", e);
+        }
+    }
+
+    // Écoute les messages de la socket
+    private void startListening() {
+        receiveThread = new Thread(() -> {
+            try {
+                byte[] receiveData = new byte[1024];
+                while (!Thread.currentThread().isInterrupted()) {
+                    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+                    socket.receive(receivePacket);
+                    String response = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                    Log.d(ACTIVITY_NAME, "Received message: " + response);
+                    runOnUiThread(() -> {
+                        Log.d("Received message", response);
+                        onNewDataReceived(response);
+                    });
+                }
+            } catch (Exception e) {
+                Log.e(ACTIVITY_NAME, "Error receiving UDP message", e);
+            }
+        });
+        receiveThread.start();
+    }
+
+    // Envoie le message "getValues()" à la socket toutes les 5 secondes pour récupérer les données des capteurs
+    public void getValues() {
         sendUdpRunnable = new Runnable() {
             @Override
             public void run() {
                 sendUdpMessage("getValues()", false);
-                handler.postDelayed(this, 5000); // Re-post the Runnable with a delay of 5 seconds
+                handler.postDelayed(this, 5000);
             }
         };
-        handler.post(sendUdpRunnable); // Start the Runnable immediately
+        handler.post(sendUdpRunnable);
     }
 
+    // Décrypte les données reçues et les affiche dans le RecyclerView
     public void onNewDataReceived(String newData) {
         try {
-//            String decryptedData = EncryptionUtil.decrypt(newData, secretKey);
-            updateRecyclerView(newData);
+            String decryptedData = EncryptionUtil.decrypt(newData, secretKey);
+            updateRecyclerView(decryptedData);
         } catch (Exception e) {
-            Log.e("MainActivity", "Error decrypting data", e);
+            Log.e(ACTIVITY_NAME, "Error decrypting data", e);
         }
 
     }
 
+    // Met à jour les données du RecyclerView
     public void updateRecyclerView(String message) {
-        message = message.replace('\r', ';');
         String[] parts = message.split(";");
 
         screens.add(Integer.parseInt(parts[0]));
-
-        if (fritsMessage) {
-            // Update the screen value with the first message received
-
-        }
 
         for (int i = 1; i < parts.length; i++) {
             for (DataCapteur d : data) {
@@ -146,61 +194,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view);
-        MyAdapter adapter = (MyAdapter) recyclerView.getAdapter();
-        if (adapter != null) {
-            adapter.notifyDataSetChanged();
-        }
+        DataTextAdaptater adapter = (DataTextAdaptater) recyclerView.getAdapter();
+        if (Objects.nonNull(adapter)) adapter.notifyDataSetChanged();
     }
 
-    protected void sendUdpMessage(String message, boolean encrypted) {
-        try {
-            InetAddress serverAddress = InetAddress.getByName(ipServerAddress);
-
-            Log.d("send message", message);
-
-            if (encrypted) {
-                message = screen + ";" + message;
-//                message = EncryptionUtil.encrypt(message, secretKey);
-            }
-
-            byte[] sendData = message.getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, udpPortServer);
-            socket.send(sendPacket);
-            Log.d("send message encrypted", message);
-        } catch (Exception e) {
-            Log.e("MainActivity", "Error sending UDP message", e);
-        }
+    // Met à jour l'adresse IP, le port de la socket et l'écran actuel
+    private void updateCurrentIpPort() {
+        currentIpTextView.setText(String.format("Adresse IP du serveur : %s", ipServerAddress));
+        currentPortTextView.setText(String.format(getString(R.string.port_udp_du_serveur_d), udpPortServer));
+        currentScreenTextView.setText(String.format(getString(R.string.eran_d), screen));
     }
 
-    private void startListening() {
-        receiveThread = new Thread(() -> {
-            try {
-                byte[] receiveData = new byte[1024];
-                while (!Thread.currentThread().isInterrupted()) {
-                    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-                    socket.receive(receivePacket);
-                    String response = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                    Log.d("MainActivity", "Received message: " + response);
-                    runOnUiThread(() -> {
-                        Log.d("Received message", response);
-                        onNewDataReceived(response);
-                    });
-                }
-            } catch (Exception e) {
-                Log.e("MainActivity", "Error receiving UDP message", e);
-            }
-        });
-        receiveThread.start();
-    }
-
+    // Affiche la boîte de dialogue des paramètres
     private void showSettingsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Settings");
 
-        // Inflate the dialog_settings layout
         View viewInflated = LayoutInflater.from(this).inflate(R.layout.settings_layout, (ViewGroup) findViewById(android.R.id.content), false);
 
-        // Set up the input fields
         final EditText inputIp = viewInflated.findViewById(R.id.input_ip);
         final EditText inputPort = viewInflated.findViewById(R.id.input_port);
         final Spinner inputScreen = viewInflated.findViewById(R.id.input_screen);
@@ -208,51 +219,46 @@ public class MainActivity extends AppCompatActivity {
         inputIp.setText(ipServerAddress);
         inputPort.setText(String.valueOf(udpPortServer));
 
-        // Populate the Spinner with the values from screens
-        ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new ArrayList<>(screens));
+        List<Integer> screensSpinnerList = new ArrayList<>(screens);
+        if (screensSpinnerList.isEmpty()) {
+            screensSpinnerList.add(0);
+        }
+        screensSpinnerList.sort(Integer::compareTo);
+        ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, screensSpinnerList);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         inputScreen.setAdapter(adapter);
 
-        // Set the current screen as the selected value
         inputScreen.setSelection(adapter.getPosition(screen));
 
         builder.setView(viewInflated);
 
-        // Set up the buttons
-        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                ipServerAddress = inputIp.getText().toString();
-                udpPortServer = Integer.parseInt(inputPort.getText().toString());
-                screen = (Integer) inputScreen.getSelectedItem();
-                updateCurrentIpPort();
+        builder.setPositiveButton("OK", (dialog, which) -> {
+            ipServerAddress = inputIp.getText().toString();
+            udpPortServer = Integer.parseInt(inputPort.getText().toString());
+
+            Integer idScreen = (Integer) inputScreen.getSelectedItem();
+            if (Objects.nonNull(idScreen)) {
+                screen = idScreen;
+            } else {
+                screen = 0;
             }
+            updateCurrentIpPort();
         });
-        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.cancel();
-            }
-        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
 
         builder.show();
     }
 
-    private void updateCurrentIpPort() {
-        currentIpTextView.setText("Adresse IP du serveur : " + ipServerAddress);
-        currentPortTextView.setText("Port UDP du serveur : " + udpPortServer);
-        currentScreenTextView.setText("Ecran : " + screen);
-    }
-
+    // Arrête le Runnable et ferme la socket lorsque l'activité est détruite
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (receiveThread != null && !receiveThread.isInterrupted()) {
+        if (Objects.nonNull(receiveThread) && !receiveThread.isInterrupted()) {
             receiveThread.interrupt();
         }
-        if (socket != null && !socket.isClosed()) {
+        if (Objects.nonNull(socket) && !socket.isClosed()) {
             socket.close();
         }
-        handler.removeCallbacks(sendUdpRunnable); // Stop the Runnable when the activity is destroyed
+        handler.removeCallbacks(sendUdpRunnable);
     }
 }
