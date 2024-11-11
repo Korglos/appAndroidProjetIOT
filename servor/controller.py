@@ -1,5 +1,6 @@
 # Program to control passerelle between Android application
 # and micro-controller through USB tty
+import json
 import time
 import argparse
 import signal
@@ -8,8 +9,15 @@ import socket
 import socketserver
 import serial
 import threading
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
+import base64
 
-HOST           = "0.0.0.0"
+
+
+
+HOST           = "192.168.1.76"
 UDP_PORT       = 10000
 MICRO_COMMANDS = ["TL" , "LT"]
 JSON_KEYS       = ["id", "lux", "uv", "ir", "pressure", "temp", "humidite"]
@@ -18,33 +26,73 @@ FILENAME        = "values.json"
 LAST_VALUE      = ""
 ORDER           = ""
 
+def unpad(data):
+        return data[:-data[-1]]
+
 class ThreadedUDPRequestHandler(socketserver.BaseRequestHandler):
 
+
+
     def handle(self):
-        data = self.request[0].strip().decode()
+        #Récuperer la donnée encodée
+        data = self.request[0].strip()
+
+        # Converti la clé hexa en tableau de bits
+        key = bytes.fromhex(KCRYPT)
+
+        #Décodage des données 
+        encrypted_bytes = base64.b64decode(data)
+
+        #Déchiffrer AES/ECB
+        cipher = AES.new(key, AES.MODE_ECB)
+
+        #Enlever le padding pour éviter la corruption du message
+        decrypted_data = unpad(cipher.decrypt(encrypted_bytes))
+        decrypted_message = ""
+        try:
+            # decode le message
+            decrypted_message = decrypted_data.decode()
+            print("MESSAGE : ", decrypted_message)
+        except UnicodeDecodeError as e:
+            print("Erreur de décodage : ", e)
+            decrypted_message = ""
+
         socket = self.request[1]
         current_thread = threading.current_thread()
         print("{}: client: {}, wrote: {}".format(current_thread.name, self.client_address, data))
+
         if data != "":
-                        if data in MICRO_COMMANDS: # Send message through UART
-                                sendUARTMessage(data)
-                        elif ";" in data: 
-                                data = data + "\r\n"
-                                ORDER = data.encode()
+                if data in MICRO_COMMANDS: # Send message through UART
+                        sendUARTMessage(data)
+                elif ";" in decrypted_message:
+                        encrypted_data = base64.b64decode(data)
+                        unpadded_data = unpad(cipher.decrypt(encrypted_data))
+                        decrypted_order = ""
+                        try:
+                                # decode le message
+                                decrypted_order = unpadded_data.decode() + "\r\n"
+                                ORDER = decrypted_order.encode()
                                 sendUARTMessage(ORDER)
-                        elif data == "getValues()": # Sent last value received from micro-controller
-                                print("J'envoie les valeurs : ", LAST_VALUE)
-                                socket.sendto(LAST_VALUE.encode(), self.client_address) 
-                                # TODO: Create last_values_received as global variable      
-                        else:
-                                print("Unknown message: ",data)
+                        except UnicodeDecodeError as e:
+                                print("Erreur de décodage : ", e)
+                        
+                elif decrypted_message  == "getValues()": # Sent last value received from micro-controller
+                        data_encode = LAST_VALUE.encode()
+                        padded_data = pad(data_encode, AES.block_size)
+                        encrypted_data = cipher.encrypt(padded_data)
+                        encrypted_base64 = base64.b64encode(encrypted_data)
+                        print("J'envoie les valeurs : ", encrypted_base64)
+                        socket.sendto(encrypted_base64, self.client_address) 
+                        # TODO: Create last_values_received as global variable      
+                else:
+                        print("Unknown message: ",data)
 
 class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
     pass
 
 
 # send serial message 
-SERIALPORT = "COM3"
+SERIALPORT = "COM6"
 BAUDRATE = 115200
 ser = serial.Serial()
 
@@ -97,7 +145,7 @@ if __name__ == '__main__':
                         # time.sleep(100)
                         if ser.inWaiting() > 0:  # S'il y a des octets entrants
                                 data_bytes = ser.read(ser.inWaiting())
-                                # print(data_bytes)
+                                print(data_bytes)
                                 
                                 
                                 msg = msg + data_bytes.decode()
@@ -109,13 +157,14 @@ if __name__ == '__main__':
                                         msg_arr = [float(value) for value in msg_arr]
                                         json_struct = {}
 
+                                        # Mettre les valeurs récupérer dans les bonnes clés du json
                                         for value in JSON_KEYS : 
                                                 json_struct[value] = msg_arr[JSON_KEYS.index(value)]
-                                        # print("JSON STRUCTURE", json_struct)
-                                        json_stringify = str(json_struct)
-                                        json_stringify.replace("\'", "\"")
-                                        # print(json_stringify)
-                                        f.write(json_stringify + ",")
+
+                                        json_parsed = json.dumps(json_struct)
+                                        print("JSON", json_parsed)
+
+                                        f.write(json_parsed + ",")
                                         LAST_VALUE = msg
                                         msg = ""
                                 
