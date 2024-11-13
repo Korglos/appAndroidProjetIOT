@@ -7,9 +7,5 @@
     "microbit": "https://git.mob-dev.fr/Schoumi/microbit.git"
   },
   "targetDependencies": {},
-  "bin": "./source",
-  "sourceFiles": [
-    "source/main.c",
-    "source/aes.c"
-  ]
+  "bin": "./source"
 }

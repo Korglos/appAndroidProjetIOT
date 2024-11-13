@@ -5,64 +5,8 @@
 #include "tsl256x.h"
 #include "veml6070.h"
 #include "bme280.h"
-#include "aes.h"
-#include <ManagedString.h>
 
-char* PROTOCOL="s85h7hdf";
-
-uint8_t key[16] = { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 
-                    0xab, 0xf7, 0x65, 0x77, 0xcd, 0xe4, 0x32, 0x55 };
-size_t bufferSize;
-
-void convertManagedStringToUint8(ManagedString mStr, uint8_t* buffer, size_t bufferSize) {
-    // Convertir ManagedString en char*
-    const char* charArray = mStr.toCharArray();
-    
-    // Taille minimale entre bufferSize et la longueur de la chaîne
-    size_t length = (size_t)(mStr.length()) < bufferSize ? mStr.length() : bufferSize;
-    
-    // Copier les données dans le tableau uint8_t
-    for (size_t i = 0; i < length; i++) {
-        buffer[i] = (uint8_t)charArray[i];
-    }
-}
-
-ManagedString convertTabuitToManagedString(uint8_t *uint8){
-    char charArray[bufferSize + 1];  
-    for (size_t i = 0; i < bufferSize; i++) {
-        charArray[i] = (char)uint8[i];  // Convertir uint8_t en char
-    }
-    charArray[bufferSize] = '\0';  // Ajouter le caractère null pour la fin de la chaîne
-    return ManagedString(charArray);
-
-}
-
-void decryptAES(ManagedString data, uint8_t* decrypted) {
-    struct AES_ctx ctx;
-    AES_init_ctx(&ctx, key);
-
-    uint8_t ciphertext[bufferSize];
-    convertManagedStringToUint8(data, ciphertext, bufferSize);
-
-    memcpy(decrypted, ciphertext, bufferSize);  // Copier le texte chiffré
-    AES_ECB_decrypt(&ctx, decrypted);   // Déchiffrer
-}
-
-void encryptAES(ManagedString data, uint8_t *ciphertext) {       
-    uint8_t buffer[bufferSize];
-    
-    convertManagedStringToUint8(data, buffer, bufferSize);
-    
-    // Initialiser AES
-    struct AES_ctx ctx;
-    AES_init_ctx(&ctx, key);
-
-    // Copier le texte clair dans le buffer du texte chiffré
-    memcpy(ciphertext, buffer, bufferSize);
-
-    // Chiffrer le texte (AES-128 ECB)
-    AES_ECB_encrypt(&ctx, ciphertext);
-}
+#define PROTOCOL "s85h7hdf"
 
 //Microbit
 MicroBitI2C i2c(I2C_SDA0,I2C_SCL0);
@@ -89,7 +33,7 @@ int order[6] = {0,1,2,3,4,5};
 
 char* id;
 
-char* generateRandomString(int length){ 
+char* generateRandomString(){ 
     int randomNumber = uBit.random(900)+100;
     static char idBuffer[4];
     sprintf(idBuffer, "%d", randomNumber);
@@ -115,27 +59,22 @@ uint32_t* getValues()
 /*
 Ecoute sur la liason radio
 Regarde si il y a notre protocole: check "Protocole"
-Regarde l'id de la commande si il est égal à son propre id
-Dans la liste order, affecte la variable i à une certaine position (si ce n'est pas un ";")
+Eneleve "protocole" puis met dans order la valeurs (si ce n'est pas un ";")
 Efface l'ecran
 */
 void onData(MicroBitEvent)
 {
     ManagedString buffer = uBit.radio.datagram.recv();
-    
     if(buffer.length()>0){
         uBit.serial.send(buffer+"\n");
         if(buffer.substring(0,8)==PROTOCOL && buffer.substring(8,3)==id)
         {
             int count = 0;
-            ManagedString content = buffer.substring(11,buffer.length()-1);
-            uint8_t decrypt_content[bufferSize];
-            decryptAES(content, decrypt_content);
             for(int i = 0; i < buffer.length()-11; i++){
-                if(decrypt_content.charAt(i) != ';')
+                if(buffer.substring(11,buffer.length()-1).charAt(i) != ';')
                 {
-                    order[decrypt_content-'0'] = count;
-                    uBit.serial.send(decrypt_content);
+                    order[buffer.substring(11,buffer.length()-1).charAt(i)-'0'] = count;
+                    uBit.serial.send(buffer.substring(11,buffer.length()-1).charAt(i));
                     count++;
                 }
             }
@@ -186,14 +125,9 @@ void ecran(){
     screen.update_screen();
 
     //---------------Radio----------------
-    ManagedString valuesString = ""+convertedCString(id)+";"+strValue(values[1])+";"+strValue(values[2])+strValue(values[0])+";"+strValue(values[3])+";"+strValue(values[4]/100)+"."+strValue(values[4]/100)+";"+strValue(values[5]/100)+"."+strValue(values[5]/100);
-    uint8_t encrypt_content[bufferSize];
-
-    char bufferRadioQueri[35];
-    encryptAES(valuesString,encrypt_content);
-    sprintf(bufferRadioQueri, "%s;%s", PROTOCOL, convertTabuitToManagedString(encrypt_content));
-
-    uBit.radio.datagram.send(bufferRadioQueri);
+    char bufferRadio[300];
+    sprintf(bufferRadio, "%s%s;%lu;%lu;%lu;%lu;%lu.%lu;%lu.%lu", PROTOCOL, id, values[1], values[2], values[0], values[3], values[4]/100, values[4]%100, values[5]/100, values[5]%100);
+    uBit.radio.datagram.send(bufferRadio);
     //------------------------------------
 
     free(values);
@@ -207,10 +141,11 @@ int main() {
     uBit.radio.setGroup(14);
     uBit.messageBus.listen(MICROBIT_ID_RADIO, MICROBIT_RADIO_EVT_DATAGRAM, onData);
 
-    id = generateRandomString(4);
+    id = generateRandomString();
     while(true)
     {
         ecran();
     }
     release_fiber();
 }
+

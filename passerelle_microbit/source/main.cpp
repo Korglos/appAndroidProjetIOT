@@ -24,75 +24,15 @@ DEALINGS IN THE SOFTWARE.
 */
 
 #include "MicroBit.h"
-#include "aes.h"
 #define CLEPROTOCOL "s85h7hdf"
 
 MicroBit uBit;
-// Clé de 16 octets (128 bits)
-uint8_t key[16] = { 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 
-                    0xab, 0xf7, 0x65, 0x77, 0xcd, 0xe4, 0x32, 0x55 };
-size_t bufferSize;
 
-//Converti le ManagedString mStr en tableau de uint8_t buffer
-void convertManagedStringToUint8(ManagedString mStr, uint8_t* buffer) {
-    // Convertir ManagedString en char*
-    const char* charArray = mStr.toCharArray();
-    
-    size_t length = (size_t)(mStr.length()) < bufferSize ? mStr.length() : bufferSize;
-    
-    // Copier les données dans le tableau uint8_t
-    for (size_t i = 0; i < length; i++) {
-        buffer[i] = (uint8_t)charArray[i];
-    }
-}
-//Converti le tableau de uint8_t en ManagedString
-ManagedString convertTabuitToManagedString(uint8_t *uint8){
-    char charArray[bufferSize + 1];  
-    for (size_t i = 0; i < bufferSize; i++) {
-        charArray[i] = (char)uint8[i];  // Convertir uint8_t en char
-    }
-    charArray[bufferSize] = '\0';  // Ajouter le caractère null pour la fin de la chaine
-    return ManagedString(charArray);
 
-}
-//Méthode pour déchiffrer avec AES
-void decryptAES(ManagedString data, uint8_t* decrypted) {
-    struct AES_ctx ctx;
-    AES_init_ctx(&ctx, key);
-
-    uint8_t ciphertext[bufferSize];
-    convertManagedStringToUint8(data, ciphertext);
-
-    memcpy(decrypted, ciphertext, bufferSize);  // Copier le texte chiffré
-    AES_ECB_decrypt(&ctx, decrypted);   // Déchiffrer
-}
-//Méthode d'encrypt avec AES
-void encryptAES(ManagedString data, uint8_t *ciphertext) {       
-    uint8_t buffer[bufferSize];
-    
-    convertManagedStringToUint8(data, buffer);
-    
-    // Initialiser AES
-    struct AES_ctx ctx;
-    AES_init_ctx(&ctx, key);
-
-    // Copier le texte clair dans le buffer du texte chiffré
-    memcpy(ciphertext, buffer, bufferSize);
-
-    // Chiffrer le texte
-    AES_ECB_encrypt(&ctx, ciphertext);
-}
-//envoie les informations sur la radio
 void sendRadioMessage(ManagedString data){
-    
-    bufferSize = data.length();
-
-    uint8_t ciphertext[bufferSize];
-    encryptAES(data, ciphertext);
-
-    uBit.radio.datagram.send(CLEPROTOCOL + convertTabuitToManagedString(ciphertext));
+    uBit.radio.datagram.send(CLEPROTOCOL + data);
 }
-//Lit sur la radio et envoie les données sur le port serial
+
 void onData(MicroBitEvent)
 {
     ManagedString data = uBit.radio.datagram.recv();
@@ -102,24 +42,17 @@ void onData(MicroBitEvent)
     ManagedString protocol = data.substring(0, 8);
     ManagedString realData = data.substring(8, data.length()-8);
     if(protocol == CLEPROTOCOL){
-        bufferSize = data.length()-8;
-
-        uint8_t dechiffre[bufferSize];
-        
-        decryptAES(realData, dechiffre);
-
-        uBit.serial.send(convertTabuitToManagedString(dechiffre)+"\r\n");
+        uBit.serial.send(realData+"\r\n");
     }
-
 }
-//Initialise l'écoute sur le bus radio
+
 void receiveRadioMessage(){
     uBit.radio.enable();
     uBit.radio.setGroup(14);
     uBit.messageBus.listen(MICROBIT_ID_RADIO, MICROBIT_RADIO_EVT_DATAGRAM, onData);
+
 }
 
-//Lit les données sur le port sérial et les envoie sur la radio
 void readSerialData(MicroBitEvent){
     //Lis sur le port serial jusqu'à trouver \n
     ManagedString receivedData = uBit.serial.readUntil('\n');
@@ -127,7 +60,7 @@ void readSerialData(MicroBitEvent){
     sendRadioMessage(receivedData.substring(0, receivedData.length()-1));//Il faut supprimer les \r\n pour ne pas envoyer trop de data par radio.
 }
 
-//Initialise l'écoute sur le bus serial
+
 void receiveSerialMessage(){
     //configure le buffer serial pour à 32o
     uBit.serial.setRxBufferSize(32);
