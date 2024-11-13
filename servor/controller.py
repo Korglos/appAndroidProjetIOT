@@ -17,7 +17,7 @@ import base64
 
 
 
-HOST           = "192.168.1.76"
+HOST           = "10.56.189.160"
 UDP_PORT       = 10000
 MICRO_COMMANDS = ["TL" , "LT"]
 JSON_KEYS       = ["id", "lux", "uv", "ir", "pressure", "temp", "humidite"]
