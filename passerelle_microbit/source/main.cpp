@@ -28,11 +28,11 @@ DEALINGS IN THE SOFTWARE.
 
 MicroBit uBit;
 
-
+//Envoi du message par radio en ajoutant la clé de protocole.
 void sendRadioMessage(ManagedString data){
     uBit.radio.datagram.send(CLEPROTOCOL + data);
 }
-
+//Analyse de la réception radio, interprète le message uniquement si le protocole est respecté.
 void onData(MicroBitEvent)
 {
     ManagedString data = uBit.radio.datagram.recv();
@@ -45,14 +45,14 @@ void onData(MicroBitEvent)
         uBit.serial.send(realData+"\r\n");
     }
 }
-
+//Configuration de la radio et mise en place du bus d'écoute pour déclencher la méthode onData
 void receiveRadioMessage(){
     uBit.radio.enable();
     uBit.radio.setGroup(14);
     uBit.messageBus.listen(MICROBIT_ID_RADIO, MICROBIT_RADIO_EVT_DATAGRAM, onData);
 
 }
-
+//Lis sur le port serial quand le caractère \n à été trouvé et transmet le message à la radio.
 void readSerialData(MicroBitEvent){
     //Lis sur le port serial jusqu'à trouver \n
     ManagedString receivedData = uBit.serial.readUntil('\n');
@@ -60,7 +60,7 @@ void readSerialData(MicroBitEvent){
     sendRadioMessage(receivedData.substring(0, receivedData.length()-1));//Il faut supprimer les \r\n pour ne pas envoyer trop de data par radio.
 }
 
-
+//Configuration du port serial et initialisation du bus de lecture
 void receiveSerialMessage(){
     //configure le buffer serial pour à 32o
     uBit.serial.setRxBufferSize(32);
